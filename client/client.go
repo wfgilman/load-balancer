@@ -18,7 +18,7 @@ func (lb *LoadBalancer) AddBackend(backend *backend.WebServer) {
 }
 
 func (lb *LoadBalancer) ServeProxy(rw http.ResponseWriter, req *http.Request) {
-	proxyServer := lb.Backends[0]
-	fmt.Printf("Forwarding request to address %s\n", proxyServer.Address())
-	proxyServer.ServeHTTP(rw, req)
+	webServer := lb.Backends[0]
+	fmt.Printf("Forwarding request to address %s\n", webServer.Address())
+	webServer.ServeHTTP(rw, req)
 }
