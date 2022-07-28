@@ -47,3 +47,16 @@ func NewWebServer(addr string) *WebServer {
 		Proxy: httputil.NewSingleHostReverseProxy(serverUrl),
 	}
 }
+
+func (ws *WebServer) StartServer() {
+	server := http.Server{
+		Addr:    ws.Address(),
+		Handler: ws,
+	}
+
+	log.Printf("Backend WebServer started at %s\n", ws.Address())
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatal(err)
+	}
+	defer server.Close()
+}

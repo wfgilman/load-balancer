@@ -33,8 +33,7 @@ func TestAddBackend(t *testing.T) {
 
 func TestServeProxy(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// This would be one of our many backend servers rendering
-		// responses to the client.
+		fmt.Println("Backend received request")
 	}))
 	defer server.Close()
 
