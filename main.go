@@ -39,7 +39,8 @@ func main() {
 		Current: 0,
 	}
 
-	// Start backend servers.
+	// Start backend servers in a group of go routines
+	// so we can send a shutdown message to the group.
 	grp, grpContext := errgroup.WithContext(ctx)
 	tokens := strings.Split(*serverList, ",")
 	for _, token := range tokens {
@@ -72,13 +73,19 @@ func main() {
 		Handler: http.HandlerFunc(lbHandler),
 	}
 
+	// Run the Load Balancer in the same group so we can shut everything down
+	// gracefully with Ctrl+C from the command line.
 	grp.Go(func() error {
 		log.Printf("Load Balancer started at :%d\n", lb.Port)
 		return balancer.ListenAndServe()
 	})
+	grp.Go(func() error {
+		<-grpContext.Done()
+		log.Printf("Load Balancer shutdown gracefully")
+		return balancer.Shutdown(context.Background())
+	})
 
-	<-grpContext.Done()
-	log.Printf("Load Balancer shutdown gracefully")
-	balancer.Shutdown(context.Background())
-	log.Println("Program exited")
+	if err := grp.Wait(); err != nil {
+		fmt.Printf("Program exited with reason: %s\n", err)
+	}
 }
