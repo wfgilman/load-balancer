@@ -11,7 +11,7 @@ import (
 type Server interface {
 	Address() string
 	IsAlive() bool
-	ServeHTTP(rw http.ResponseWriter, req *http.Request)
+	Serve(rw http.ResponseWriter, req *http.Request)
 }
 
 type WebServer struct {
@@ -29,7 +29,7 @@ func (ws *WebServer) IsAlive() bool {
 	return ws.Alive
 }
 
-func (ws *WebServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+func (ws *WebServer) Serve(rw http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(rw, "Hello from server at %s\n", ws.Addr)
 	ws.Proxy.ServeHTTP(rw, req)
 }

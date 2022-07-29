@@ -2,8 +2,8 @@
 A simple load balancer written in Go.
 
 ### Features
-* [ ] Testing
-* [ ] Round Robin Method
+* [x] Testing
+* [x] Round Robin Method
 * [ ] Health Checks
 * [ ] Least Connections Method
 * [ ] Least Latency Method

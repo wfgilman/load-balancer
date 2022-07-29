@@ -20,6 +20,7 @@ func main() {
 	// Parse startup parameters from command line.
 	serverList := flag.String("backends", "localhost:3000", "Enter backends in format: localhost:4000,localhost:4001")
 	port := flag.Int("port", 8000, "Enter port number for load balancer")
+	algo := flag.String("algo", "", "Balancing algorithm")
 	flag.Parse()
 
 	// Setup context and channel for graceful server shutdown.
@@ -46,9 +47,13 @@ func main() {
 	for _, token := range tokens {
 		webServer := backend.NewWebServer(token)
 
+		handler := func(rw http.ResponseWriter, req *http.Request) {
+			webServer.Serve(rw, req)
+		}
+
 		server := http.Server{
 			Addr:    webServer.Address(),
-			Handler: webServer,
+			Handler: http.HandlerFunc(handler),
 		}
 
 		lb.AddBackend(webServer)
@@ -65,7 +70,14 @@ func main() {
 	}
 
 	lbHandler := func(rw http.ResponseWriter, req *http.Request) {
-		lb.ServeProxy(rw, req)
+		webServer := func() *backend.WebServer {
+			if *algo == "RoundRobin" {
+				return lb.RoundRobin()
+			}
+			return lb.AlwaysFirst()
+		}()
+
+		lb.ServeProxy(rw, req, webServer)
 	}
 
 	balancer := http.Server{

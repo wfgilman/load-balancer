@@ -53,7 +53,11 @@ func TestServeHTTP(t *testing.T) {
 	}
 
 	webServer := createWebServer(t, backendUrl.String())
-	reverseProxy := httptest.NewServer(webServer) // This is the line that calls the ServerHTTP method on the WebServer struct.
+	handler := func(rw http.ResponseWriter, req *http.Request) {
+		webServer.Serve(rw, req)
+	}
+
+	reverseProxy := httptest.NewServer(http.HandlerFunc(handler))
 	defer reverseProxy.Close()
 
 	res, err := http.Get(reverseProxy.URL)

@@ -57,7 +57,7 @@ func TestServeProxy(t *testing.T) {
 	lb.AddBackend(webServer)
 
 	handler := func(rw http.ResponseWriter, req *http.Request) {
-		lb.ServeProxy(rw, req)
+		lb.ServeProxy(rw, req, lb.AlwaysFirst())
 	}
 
 	proxy := httptest.NewServer(http.HandlerFunc(handler))
@@ -77,4 +77,24 @@ func TestServeProxy(t *testing.T) {
 	actual := string(body)
 
 	assert.Equal(t, expect, actual)
+}
+
+func TestRoundRobin(t *testing.T) {
+	lb := LoadBalancer{
+		Current: 4,
+	}
+
+	for i := 0; i < 5; i++ {
+		webServer := &backend.WebServer{
+			Addr: fmt.Sprintf("000%d", i),
+		}
+		lb.AddBackend(webServer)
+	}
+
+	for _, webServer := range lb.Backends {
+		expect := webServer.Address()
+		actual := lb.RoundRobin().Address()
+		assert.Equal(t, expect, actual)
+	}
+
 }
