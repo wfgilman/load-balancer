@@ -1,4 +1,4 @@
-package client
+package pool
 
 import (
 	"fmt"
@@ -13,6 +13,7 @@ import (
 	"github.com/wfgilman/balancer/backend"
 )
 
+// TODO: Update for new methods.
 func TestAddBackend(t *testing.T) {
 	backendUrl, _ := url.Parse("http://localhost:3000")
 	webServer := &backend.WebServer{

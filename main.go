@@ -4,100 +4,89 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
+	"time"
 
 	"github.com/wfgilman/balancer/backend"
-	"github.com/wfgilman/balancer/client"
+	"github.com/wfgilman/balancer/pool"
+	"github.com/wfgilman/balancer/proxy"
 )
+
+func healthCheck() {
+	t := time.NewTicker(15 * time.Second)
+	for {
+		select {
+		case <-t.C:
+			log.Println("Health check started")
+			serverPool.HealthCheck()
+			log.Println("Health check complete")
+		}
+	}
+}
+
+func serverStats() {
+	t := time.NewTicker(20 * time.Minute)
+	for {
+		select {
+		case <-t.C:
+			log.Println("Server Report...")
+			serverPool.ServerStats()
+		}
+	}
+}
+
+var serverPool pool.Pool
 
 func main() {
 	// Parse startup parameters from command line.
-	serverList := flag.String("backends", "localhost:3000", "Enter backends in format: localhost:4000,localhost:4001")
+	numBackends := flag.Int("n", 5, "Enter number of backend servers")
 	port := flag.Int("port", 8000, "Enter port number for load balancer")
-	algo := flag.String("algo", "", "Balancing algorithm")
+	algo := flag.String("algo", "alwaysfirst", "Balancing algorithm")
 	flag.Parse()
 
-	// Setup context and channel for graceful server shutdown.
-	ctx, cancel := context.WithCancel(context.Background())
+	serverPool.Algorithm = *algo
 
-	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
-
-		<-c
-		cancel()
-	}()
-
-	// Create Load Balancer.
-	lb := &client.LoadBalancer{
-		Port:    *port,
-		Current: 0,
-	}
-
-	// Start backend servers in a group of go routines
-	// so we can send a shutdown message to the group.
-	grp, grpContext := errgroup.WithContext(ctx)
-	tokens := strings.Split(*serverList, ",")
-	for _, token := range tokens {
-		webServer := backend.NewWebServer(token)
-
-		handler := func(rw http.ResponseWriter, req *http.Request) {
-			webServer.Serve(rw, req)
+	for i := 0; i < *numBackends; i++ {
+		// Create backend server.
+		addr := fmt.Sprintf("localhost:500%d", i)
+		be := backend.New(addr)
+		beServer := http.Server{
+			Addr:    addr,
+			Handler: http.HandlerFunc(be.RequestHandler()),
 		}
 
-		server := http.Server{
-			Addr:    webServer.Address(),
-			Handler: http.HandlerFunc(handler),
+		// Start backend server.
+		log.Printf("(%s) Backend Server started\n", be.Address())
+		go beServer.ListenAndServe()
+
+		// Randomly crash a server
+		if i%*numBackends == 1 {
+			time.AfterFunc(25*time.Second, func() {
+				log.Printf("(%s) Backend Server crashed\n", be.Address())
+				beServer.Shutdown(context.Background())
+			})
 		}
 
-		lb.AddBackend(webServer)
+		// Create a ReverseProxy pointing to backend server.
+		p := proxy.New(be.Address())
+		p.ErrorHandler = proxy.ErrorHandler(p, serverPool, be)
+		be.SetReverseProxy(p)
 
-		grp.Go(func() error {
-			log.Printf("Backend WebServer started at %s\n", webServer.Address())
-			return server.ListenAndServe()
-		})
-		grp.Go(func() error {
-			<-grpContext.Done()
-			log.Printf("Backend WebServer at %s shutdown gracefully\n", webServer.Address())
-			return server.Shutdown(context.Background())
-		})
+		// Add the backend to the server pool.
+		serverPool.AddServer(be)
 	}
 
-	lbHandler := func(rw http.ResponseWriter, req *http.Request) {
-		webServer := func() *backend.WebServer {
-			if *algo == "RoundRobin" {
-				return lb.RoundRobin()
-			}
-			return lb.AlwaysFirst()
-		}()
-
-		lb.ServeProxy(rw, req, webServer)
+	// Create the load balancer server.
+	server := http.Server{
+		Addr:    fmt.Sprintf("localhost:%d", *port),
+		Handler: http.HandlerFunc(serverPool.RequestHandler()),
 	}
 
-	balancer := http.Server{
-		Addr:    fmt.Sprintf(":%d", lb.Port),
-		Handler: http.HandlerFunc(lbHandler),
-	}
+	go healthCheck()
+	go serverStats()
 
-	// Run the Load Balancer in the same group so we can shut everything down
-	// gracefully with Ctrl+C from the command line.
-	grp.Go(func() error {
-		log.Printf("Load Balancer started at :%d\n", lb.Port)
-		return balancer.ListenAndServe()
-	})
-	grp.Go(func() error {
-		<-grpContext.Done()
-		log.Printf("Load Balancer shutdown gracefully")
-		return balancer.Shutdown(context.Background())
-	})
-
-	if err := grp.Wait(); err != nil {
-		fmt.Printf("Program exited with reason: %s\n", err)
-	}
+	// Start the load balancer.
+	log.Printf("(%s) Load Balancer started\n", server.Addr)
+	server.ListenAndServe()
 }
