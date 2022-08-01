@@ -30,6 +30,30 @@ The `main` function runs a health check on an interval which makes a TCP connect
 server to verify it is alive, then sets the status of each backend through the `Server` interface
 accordingly.
 
+### Usage
+Clone the repository and navigate to the root of the project and run `go run .`
+The application takes three flags:
+```
+--n       The number of backend servers to start. Defaults to 5.
+--port    The port number on which to start the load balancer. This will
+          be the port you'd call with cURL
+--algo    The balancing algorithm to use. Options are:
+          "alwaysfirst"   Takes the first server in the slice
+          "roundrobin"    Takes the next healthy server sequentially
+          "leastlatency"  Takes the server with the lowest average response time
+          "fewestconn"    Takes the server with the least active connections
+```
+In another window, run the following cURL command:
+```
+$ curl http://localhost:8000
+(localhost:5000) Returned response in 46(ms)
+(localhost:5001) Returned response in 44(ms)
+(localhost:5002) Returned response in 175(ms)
+(localhost:5003) Returned response in 197(ms)
+(localhost:5004) Returned response in 121(ms)
+(localhost:5000) Returned response in 103(ms)
+```
+
 ### Round Robin Algorithm
 ![Schematic](/assets/go-balancer.gif)
 
